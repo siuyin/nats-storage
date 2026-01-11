@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/nats-io/nuid"
 	"github.com/siuyin/nats-storage/nstor"
@@ -18,35 +19,11 @@ func main() {
 	}
 	defer nc.Close()
 
-	js, err := jetstream.New(nc)
+	_, c, err := createStreamAndConsumer(context.Background(), nc, "mystream", 1000000, []string{"mysubj"}, "mycons")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	cfg := jetstream.StreamConfig{
-		Name:      "mystream",
-		Subjects:  []string{"mysubj"},
-		MaxBytes:  1000000,
-		MaxAge:    time.Hour,
-		Retention: jetstream.WorkQueuePolicy,
-	}
-	s, err := js.CreateStream(context.Background(), cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	//c, err := s.CreateConsumer(context.Background(), jetstream.ConsumerConfig{Name: "mycons", FilterSubject: "mysubj"})
-	c, err := s.CreateConsumer(context.Background(), jetstream.ConsumerConfig{Name: "mycons-1"})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for n := 0; n < 3; n++ {
-		if _, err := js.Publish(context.Background(), "mysubj", []byte(time.Now().Format("15:04:05.000000")),
-			jetstream.WithMsgID(nuid.Next())); err != nil {
-			log.Fatal(err)
-		}
-	}
+	publishSampleData(nc)
 
 	msgIter, err := c.Messages()
 	if err != nil {
@@ -66,4 +43,43 @@ loop:
 	}
 
 	log.Println("stream and consumer created")
+}
+
+func createStreamAndConsumer(ctx context.Context, nc *nats.Conn, streamName string, size int64, subjects []string, consumerName string) (jetstream.Stream, jetstream.Consumer, error) {
+	js, err := jetstream.New(nc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating jetstream context: %v", err)
+	}
+
+	cfg := jetstream.StreamConfig{
+		Name:      streamName,
+		Subjects:  subjects,
+		MaxBytes:  size,
+		MaxAge:    time.Hour,
+		Retention: jetstream.WorkQueuePolicy,
+	}
+	s, err := js.CreateStream(context.Background(), cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating stream: %v", err)
+	}
+
+	c, err := s.CreateConsumer(context.Background(), jetstream.ConsumerConfig{Name: "mycons"})
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating consumer: %v", err)
+	}
+
+	return s, c, nil
+}
+
+func publishSampleData(nc *nats.Conn) {
+	js, err := jetstream.New(nc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for n := 0; n < 3; n++ {
+		if _, err := js.Publish(context.Background(), "mysubj", []byte(time.Now().Format("15:04:05.000000")),
+			jetstream.WithMsgID(nuid.Next())); err != nil {
+			log.Fatal(err)
+		}
+	}
 }
