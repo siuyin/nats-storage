@@ -23,26 +23,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	publishSampleData(nc)
 
-	msgIter, err := c.Messages()
-	if err != nil {
-		log.Fatal(err)
-	}
-loop:
-	for {
-		msg, err := msgIter.Next(jetstream.NextMaxWait(80 * time.Millisecond))
-		switch {
-		case err != nil && err.Error() == "nats: timeout":
-			break loop
-		case err != nil:
-			log.Fatal(err)
-		}
-		fmt.Printf("%s\n", msg.Data())
-		msg.Ack() // must explicitly ack.
-	}
+	receiveAndProcessMessages(c)
 
-	log.Println("stream and consumer created")
+	log.Println("stream and consumer processing done")
 }
 
 func createStreamAndConsumer(ctx context.Context, nc *nats.Conn, streamName string, size int64, subjects []string, consumerName string) (jetstream.Stream, jetstream.Consumer, error) {
@@ -81,5 +67,24 @@ func publishSampleData(nc *nats.Conn) {
 			jetstream.WithMsgID(nuid.Next())); err != nil {
 			log.Fatal(err)
 		}
+	}
+}
+
+func receiveAndProcessMessages(c jetstream.Consumer) {
+	msgIter, err := c.Messages()
+	if err != nil {
+		log.Fatal(err)
+	}
+loop:
+	for {
+		msg, err := msgIter.Next(jetstream.NextMaxWait(80 * time.Millisecond))
+		switch {
+		case err != nil && err.Error() == "nats: timeout":
+			break loop
+		case err != nil:
+			log.Fatal(err)
+		}
+		fmt.Printf("%s\n", msg.Data())
+		msg.Ack() // must explicitly ack.
 	}
 }
