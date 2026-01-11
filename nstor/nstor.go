@@ -13,7 +13,7 @@ import (
 // Connect creates a nats connection. Remember to Close the nats connection when you are done with it.
 func Connect() (*nats.Conn, error) {
 	creds := dflt.EnvString("CREDS", "your nats connection credentials as a string here")
-	natsURL := dflt.EnvString("NATS_URL", "wss://connect.ngs.global")
+	natsURL := dflt.EnvString("NATS_URL", "wss://connect.ngs.global:443")
 	log.Printf("nstor: CREDS[0:10]=%s: NATS_URL=%s", creds[0:10], natsURL)
 
 	nc, err := nats.Connect(natsURL, nats.UserCredentialBytes([]byte(creds)))
