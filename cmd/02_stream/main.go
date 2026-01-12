@@ -19,14 +19,14 @@ func main() {
 	}
 	defer nc.Close()
 
-	_, c, err := createStreamAndConsumer(context.Background(), nc, "mystream", 1000000, []string{"mysubj"}, "mycons")
+	_, myConsumer, err := createStreamAndConsumer(context.Background(), nc, "mystream", 1000000, []string{"mysubj"}, "mycons")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	publishSampleData(nc)
 
-	receiveAndProcessMessages(c)
+	receiveAndProcessMessages(myConsumer)
 
 	log.Println("stream and consumer processing done")
 }
