@@ -16,72 +16,178 @@ import (
 
 var ctx = context.Background()
 
-func main() {
-	nc, ns, err := embedNATSServer()
-	if err != nil {
-		log.Fatal(err)
-	}
-	//defer ns.WaitForShutdown() // requires a ctrl-C to terminate
-	defer ns.Shutdown()
-	defer nc.Close()
-	log.Println("server started")
+type leaf1 struct {
+	nc   *nats.Conn
+	ns   *server.Server
+	js   jetstream.JetStream
+	strm jetstream.Stream
+	cons jetstream.Consumer
+	kv   jetstream.KeyValue
+}
 
-	js, err := jetstream.New(nc)
+func newLeaf1(ctx context.Context, name string) *leaf1 {
+	var err error
+	l := leaf1{}
+	l.nc, l.ns, err = embedNATSServer()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("newLeaf1: ", err)
 	}
+
+	l.js, err = jetstream.New(l.nc)
+	if err != nil {
+		log.Fatal("newLeaf1: jetstream ", err)
+	}
+
+	l.strm, err = l.js.CreateStream(ctx, jetstream.StreamConfig{
+		Name: name, Subjects: []string{"m.>"}, MaxAge: 10 * time.Minute,
+	})
+	if err != nil {
+		log.Fatal("newLeaf1: create stream: ", err)
+	}
+
+	l.cons, err = l.strm.CreateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons"})
+	if err != nil {
+		log.Fatal("newLeaf1: create cons: ", err)
+	}
+
+	l.kv, err = l.js.CreateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: name + "KV"})
+	if err != nil {
+		log.Fatal("newLeaf1: create KV: ", err)
+	}
+
+	return &l
+}
+
+func (l *leaf1) receiveAndDisplayMessages(ctx context.Context) {
+	iter, err := l.cons.Messages()
+	if err != nil {
+		log.Fatal("leaf1 recv: ", err)
+	}
+
+	maxWait := jetstream.NextMaxWait(10 * time.Millisecond)
+	cInf, err := l.cons.Info(ctx)
+	if err != nil {
+		log.Fatal("leaf1 recv info : ", err)
+	}
+	for {
+		msg, err := iter.Next(maxWait)
+		if err != nil && err.Error() == "nats: timeout" {
+			break
+		}
+		if err != nil {
+			log.Fatal("leaf1 recv next: ", err)
+		}
+
+		fmt.Println(cInf.Name, ":", string(msg.Data()))
+		msg.Ack()
+	}
+}
+
+type hub struct {
+	nc   *nats.Conn
+	js   jetstream.JetStream
+	strm jetstream.Stream
+	cons jetstream.Consumer
+	kv   jetstream.KeyValue
+}
+
+func newHub(ctx context.Context, name, source, srcDomain string) *hub {
+	var err error
+	h := hub{}
+	h.nc, err = nats.Connect(dflt.EnvString("NATS_URL", "a@localhost:4222"))
+	if err != nil {
+		log.Fatal("hub connect: ", err)
+	}
+
+	h.js, err = jetstream.New(h.nc)
+	if err != nil {
+		log.Fatal("hub jetstream: ", err)
+	}
+
+	h.strm, err = h.js.CreateStream(ctx, jetstream.StreamConfig{
+		Name: name, MaxAge: 10 * time.Minute,
+		Sources: []*jetstream.StreamSource{&jetstream.StreamSource{Name: source, Domain: srcDomain}},
+	})
+	if err != nil {
+		log.Fatal("hub create stream: ", err)
+	}
+
+	h.cons, err = h.strm.CreateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons"})
+	if err != nil {
+		log.Fatal("hub create consumer: ", err)
+	}
+
+	h.kv, err = h.js.CreateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: name + "KV", Mirror: &jetstream.StreamSource{Name: "KV_" + source + "KV", Domain: srcDomain}})
+	if err != nil {
+		log.Fatal("hub create kv: ", err)
+	}
+
+	return &h
+}
+
+func (h *hub) receiveAndDisplayMessages(ctx context.Context) {
+	iter, err := h.cons.Messages()
+	if err != nil {
+		log.Fatal("hub messages: ", err)
+	}
+
+	maxWait := jetstream.NextMaxWait(100 * time.Millisecond)
+	cInf, err := h.cons.Info(ctx)
+	if err != nil {
+		log.Fatal("hub recv info : ", err)
+	}
+	for {
+		msg, err := iter.Next(maxWait)
+		if err != nil && err.Error() == "nats: timeout" {
+			break
+		}
+		if err != nil {
+			log.Fatal("hub recv next: ", err)
+		}
+
+		fmt.Println(cInf.Name, ":", string(msg.Data()))
+		msg.Ack()
+	}
+}
+
+func (h *hub) sync(ctx context.Context) {
+	start := time.Now()
+	for {
+		time.Sleep(10 * time.Millisecond)
+		inf, err := h.strm.Info(ctx)
+		if err != nil {
+			log.Fatal("hub sync:", err)
+		}
+
+		//log.Println(inf.State.Msgs, time.Now().Sub(inf.State.LastTime).Milliseconds())
+		if time.Now().Sub(inf.State.LastTime).Milliseconds() < 50 {
+			break
+		}
+	}
+	log.Printf("sync took %v ms\n", time.Now().Sub(start).Milliseconds())
+}
+
+func main() {
+	ctx := context.Background()
+	lf := newLeaf1(ctx, "mstrm")
+	defer lf.nc.Close()
+	//defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
+	defer lf.ns.Shutdown()
 
 	for i := 0; i < 3; i++ {
-		if _, err := js.Publish(ctx, "m.1", []byte(time.Now().Format("15:04:05.000000 -0700"))); err != nil {
+		if _, err := lf.js.Publish(ctx, "m.1", []byte(time.Now().Format("15:04:05.000000 -0700"))); err != nil {
 			log.Println("stream publish: ", err)
 		}
 	}
 
-	demoStream(js, "mstrm")
+	lf.receiveAndDisplayMessages(ctx)
 
-	kv, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: "mkv"})
-	if err != nil {
-		log.Fatal(err)
-	}
+	hb := newHub(ctx, "lmstrm", "mstrm", "leaf1")
+	defer hb.nc.Close()
 
-	if _, err := kv.PutString(ctx, "a", "apple: "+time.Now().Format("15:04:05.000 -0700")); err != nil {
-		log.Fatal(err)
-	}
+	hb.sync(ctx)
 
-	ent, err := kv.Get(ctx, "a")
-	if err != nil {
-		log.Println(err)
-	}
-
-	fmt.Println("mkv: a: ", string(ent.Value()))
-
-	nl, err := nats.Connect("a@localhost:4222")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer nl.Close()
-
-	jl, err := jetstream.New(nl)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	time.Sleep(10 * time.Millisecond) // allow time for stream replication
-
-	demoSourceStream(jl, "lmstrm", "mstrm", "leaf1")
-
-	kl, err := jl.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: "lmkv", Mirror: &jetstream.StreamSource{Name: "KV_mkv", Domain: "leaf1"}})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ent, err = kl.Get(ctx, "a")
-	if err != nil {
-		log.Println(err)
-	}
-
-	fmt.Println("lmkv: a: ", string(ent.Value()))
-
+	hb.receiveAndDisplayMessages(ctx)
 }
 
 func embedNATSServer() (*nats.Conn, *server.Server, error) {
@@ -111,71 +217,4 @@ func embedNATSServer() (*nats.Conn, *server.Server, error) {
 	}
 
 	return nc, ns, nil
-}
-
-func demoStream(js jetstream.JetStream, name string) {
-	strm, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name: name, Subjects: []string{"m.>"}, MaxAge: 10 * time.Minute,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	cons, err := strm.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons"})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	iter, err := cons.Messages()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	maxWait := jetstream.NextMaxWait(10 * time.Millisecond)
-	for {
-		msg, err := iter.Next(maxWait)
-		if err != nil && err.Error() == "nats: timeout" {
-			break
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Println(name, ":", string(msg.Data()))
-		msg.Ack()
-	}
-
-}
-func demoSourceStream(js jetstream.JetStream, name, source, srcDomain string) {
-	strm, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name: name, MaxAge: 10 * time.Minute, Sources: []*jetstream.StreamSource{
-			&jetstream.StreamSource{Name: source, Domain: srcDomain}}})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	cons, err := strm.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons"})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	iter2, err := cons.Messages()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	time.Sleep(300 * time.Millisecond) // allow time for stream relication
-	maxWait := jetstream.NextMaxWait(10 * time.Millisecond)
-	for {
-		msg, err := iter2.Next(maxWait)
-		if err != nil && err.Error() == "nats: timeout" {
-			break
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Println(name+":", string(msg.Data()))
-		msg.Ack()
-	}
 }
