@@ -39,6 +39,22 @@ func main() {
 
 	demoStream(js, "mstrm")
 
+	kv, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: "mkv"})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := kv.PutString(ctx, "a", "apple: "+time.Now().Format("15:04:05.000 -0700")); err != nil {
+		log.Fatal(err)
+	}
+
+	ent, err := kv.Get(ctx, "a")
+	if err != nil {
+		log.Println(err)
+	}
+
+	fmt.Println("mkv: a: ", string(ent.Value()))
+
 	nl, err := nats.Connect("a@localhost:4222")
 	if err != nil {
 		log.Fatal(err)
@@ -53,6 +69,18 @@ func main() {
 	time.Sleep(10 * time.Millisecond) // allow time for stream replication
 
 	demoSourceStream(jl, "lmstrm", "mstrm", "leaf1")
+
+	kl, err := jl.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: "lmkv", Mirror: &jetstream.StreamSource{Name: "KV_mkv", Domain: "leaf1"}})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ent, err = kl.Get(ctx, "a")
+	if err != nil {
+		log.Println(err)
+	}
+
+	fmt.Println("lmkv: a: ", string(ent.Value()))
 
 }
 
