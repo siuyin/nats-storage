@@ -50,7 +50,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	time.Sleep(300 * time.Millisecond) // allow time for stream replication
+	time.Sleep(10 * time.Millisecond) // allow time for stream replication
 
 	demoSourceStream(jl, "lmstrm", "mstrm", "leaf1")
 
