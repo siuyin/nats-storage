@@ -53,7 +53,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	maxWait := jetstream.NextMaxWait(300 * time.Millisecond)
+	maxWait := jetstream.NextMaxWait(10 * time.Millisecond)
 	for {
 		msg, err := iter.Next(maxWait)
 		if err != nil && err.Error() == "nats: timeout" {
@@ -95,6 +95,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	time.Sleep(300 * time.Millisecond) // allow time for stream relication
 	for {
 		msg, err := iter2.Next(maxWait)
 		if err != nil && err.Error() == "nats: timeout" {
