@@ -174,7 +174,12 @@ func main() {
 	//defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
 	defer lf.ns.Shutdown()
 
-	for i := 0; i < 3; i++ {
+	count, err := dflt.EnvInt("COUNT", 3)
+	if err != nil {
+		log.Fatal("count: ", err)
+	}
+
+	for i := 0; i < count; i++ {
 		if _, err := lf.js.Publish(ctx, "m.1", []byte(time.Now().Format("15:04:05.000000 -0700"))); err != nil {
 			log.Println("stream publish: ", err)
 		}
