@@ -14,6 +14,8 @@ import (
 	"github.com/siuyin/dflt"
 )
 
+var ctx = context.Background()
+
 func main() {
 	nc, ns, err := embedNATSServer()
 	if err != nil {
@@ -29,43 +31,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctx := context.Background()
-	mstrm, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name: "mstrm", Subjects: []string{"m.>"}, MaxAge: 10 * time.Minute,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	mcons, err := mstrm.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{Durable: "mcons"})
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	for i := 0; i < 3; i++ {
 		if _, err := js.Publish(ctx, "m.1", []byte(time.Now().Format("15:04:05.000000 -0700"))); err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	iter, err := mcons.Messages()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	maxWait := jetstream.NextMaxWait(10 * time.Millisecond)
-	for {
-		msg, err := iter.Next(maxWait)
-		if err != nil && err.Error() == "nats: timeout" {
-			break
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Println("mcons: ", string(msg.Data()))
-		msg.Ack()
-	}
+	demoStream(js, "mstrm")
 
 	nl, err := nats.Connect("a@localhost:4222")
 	if err != nil {
@@ -78,36 +50,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	lmstrm, err := jl.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name: "lmstrm", MaxAge: 10 * time.Minute, Sources: []*jetstream.StreamSource{
-			&jetstream.StreamSource{Name: "mstrm", Domain: "leaf1"}}})
-	if err != nil {
-		log.Fatal(err)
-	}
+	demoSourceStream(jl, "lmstrm", "mstrm", "leaf1")
 
-	lmcons, err := lmstrm.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{Durable: "lmcons"})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	iter2, err := lmcons.Messages()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	time.Sleep(300 * time.Millisecond) // allow time for stream relication
-	for {
-		msg, err := iter2.Next(maxWait)
-		if err != nil && err.Error() == "nats: timeout" {
-			break
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Println("lmcons:", string(msg.Data()))
-		msg.Ack()
-	}
 }
 
 func embedNATSServer() (*nats.Conn, *server.Server, error) {
@@ -137,4 +81,71 @@ func embedNATSServer() (*nats.Conn, *server.Server, error) {
 	}
 
 	return nc, ns, nil
+}
+
+func demoStream(js jetstream.JetStream, name string) {
+	strm, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name: name, Subjects: []string{"m.>"}, MaxAge: 10 * time.Minute,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	cons, err := strm.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons"})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	iter, err := cons.Messages()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	maxWait := jetstream.NextMaxWait(10 * time.Millisecond)
+	for {
+		msg, err := iter.Next(maxWait)
+		if err != nil && err.Error() == "nats: timeout" {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println(name, ":", string(msg.Data()))
+		msg.Ack()
+	}
+
+}
+func demoSourceStream(js jetstream.JetStream, name, source, srcDomain string) {
+	strm, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name: name, MaxAge: 10 * time.Minute, Sources: []*jetstream.StreamSource{
+			&jetstream.StreamSource{Name: source, Domain: srcDomain}}})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	cons, err := strm.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons"})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	iter2, err := cons.Messages()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	time.Sleep(300 * time.Millisecond) // allow time for stream relication
+	maxWait := jetstream.NextMaxWait(10 * time.Millisecond)
+	for {
+		msg, err := iter2.Next(maxWait)
+		if err != nil && err.Error() == "nats: timeout" {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println(name+":", string(msg.Data()))
+		msg.Ack()
+	}
 }
