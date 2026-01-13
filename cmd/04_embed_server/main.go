@@ -33,7 +33,7 @@ func main() {
 
 	for i := 0; i < 3; i++ {
 		if _, err := js.Publish(ctx, "m.1", []byte(time.Now().Format("15:04:05.000000 -0700"))); err != nil {
-			log.Fatal(err)
+			log.Println("stream publish: ", err)
 		}
 	}
 
@@ -49,6 +49,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	time.Sleep(300 * time.Millisecond) // allow time for stream replication
 
 	demoSourceStream(jl, "lmstrm", "mstrm", "leaf1")
 
