@@ -175,6 +175,7 @@ func main() {
 	defer lf.ns.Shutdown()
 
 	count, err := dflt.EnvInt("COUNT", 3)
+	log.Printf("COUNT=%d", count)
 	if err != nil {
 		log.Fatal("count: ", err)
 	}
