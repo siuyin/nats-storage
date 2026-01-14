@@ -117,7 +117,7 @@ func newHub(ctx context.Context, name, source, srcDomain string) *hub {
 		log.Fatal("hub create consumer: ", err)
 	}
 
-	h.kv, err = h.js.CreateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: name + "KV", Mirror: &jetstream.StreamSource{Name: "KV_" + source + "KV", Domain: srcDomain}})
+	h.kv, err = h.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: name + "KV", Mirror: &jetstream.StreamSource{Name: "KV_" + source + "KV", Domain: srcDomain}})
 	if err != nil {
 		log.Fatal("hub create kv: ", err)
 	}
@@ -159,8 +159,9 @@ func (h *hub) sync(ctx context.Context) {
 			log.Fatal("hub sync:", err)
 		}
 
-		//log.Println(inf.State.Msgs, time.Now().Sub(inf.State.LastTime).Milliseconds())
-		if time.Now().Sub(inf.State.LastTime).Milliseconds() < 50 {
+		tDelta := time.Now().Sub(inf.State.LastTime).Milliseconds()
+		log.Println(inf.State.Msgs, tDelta)
+		if tDelta < 50 || tDelta > 5000 {
 			break
 		}
 	}
@@ -171,8 +172,8 @@ func main() {
 	ctx := context.Background()
 	lf := newLeaf1(ctx, "mstrm")
 	defer lf.nc.Close()
-	//defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
-	defer lf.ns.Shutdown()
+	defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
+	//defer lf.ns.Shutdown()
 
 	count, err := dflt.EnvInt("COUNT", 3)
 	log.Printf("COUNT=%d", count)
