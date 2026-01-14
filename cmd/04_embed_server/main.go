@@ -150,21 +150,26 @@ func (h *hub) receiveAndDisplayMessages(ctx context.Context) {
 	}
 }
 
-func (h *hub) sync(ctx context.Context) {
+func (h *hub) sync(ctx context.Context, l *leaf1) {
 	start := time.Now()
 	for {
-		time.Sleep(10 * time.Millisecond)
-		inf, err := h.strm.Info(ctx)
+		leafInf, err := l.strm.Info(ctx)
 		if err != nil {
-			log.Fatal("hub sync:", err)
+			log.Fatal("leaf1 info:", err)
 		}
 
-		tDelta := time.Now().Sub(inf.State.LastTime).Milliseconds()
-		log.Println(inf.State.Msgs, tDelta)
-		if tDelta < 50 || tDelta > 5000 {
-			break
+		hubInf, err := h.strm.Info(ctx)
+		if err != nil {
+			log.Fatal("hub info:", err)
 		}
+
+		if leafInf.State.LastTime.Sub(hubInf.State.LastTime) > 0 { // not caught up yet
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		break
 	}
+
 	log.Printf("sync took %v ms\n", time.Now().Sub(start).Milliseconds())
 }
 
@@ -172,8 +177,8 @@ func main() {
 	ctx := context.Background()
 	lf := newLeaf1(ctx, "mstrm")
 	defer lf.nc.Close()
-	defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
-	//defer lf.ns.Shutdown()
+	//defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
+	defer lf.ns.Shutdown()
 
 	count, err := dflt.EnvInt("COUNT", 3)
 	log.Printf("COUNT=%d", count)
@@ -192,7 +197,7 @@ func main() {
 	hb := newHub(ctx, "lmstrm", "mstrm", "leaf1")
 	defer hb.nc.Close()
 
-	hb.sync(ctx)
+	hb.sync(ctx, lf)
 
 	hb.receiveAndDisplayMessages(ctx)
 }
