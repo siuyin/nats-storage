@@ -45,12 +45,12 @@ func newLeaf1(ctx context.Context, name string) *leaf1 {
 		log.Fatal("newLeaf1: create stream: ", err)
 	}
 
-	l.cons, err = l.strm.CreateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons"})
+	l.cons, err = l.strm.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons", DeliverPolicy: jetstream.DeliverLastPolicy})
 	if err != nil {
 		log.Fatal("newLeaf1: create cons: ", err)
 	}
 
-	l.kv, err = l.js.CreateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: name + "KV"})
+	l.kv, err = l.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: name + "KV"})
 	if err != nil {
 		log.Fatal("newLeaf1: create KV: ", err)
 	}
@@ -112,7 +112,7 @@ func newHub(ctx context.Context, name, source, srcDomain string) *hub {
 		log.Fatal("hub create stream: ", err)
 	}
 
-	h.cons, err = h.strm.CreateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons"})
+	h.cons, err = h.strm.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons", DeliverPolicy: jetstream.DeliverLastPolicy})
 	if err != nil {
 		log.Fatal("hub create consumer: ", err)
 	}
@@ -172,13 +172,22 @@ func (h *hub) sync(ctx context.Context, l *leaf1) {
 
 	log.Printf("sync took %v ms\n", time.Now().Sub(start).Milliseconds())
 }
-
+func runEmbeddedServer() {
+	nc, ns, _ := embedNATSServer()
+	defer ns.WaitForShutdown()
+	defer nc.Close()
+}
 func main() {
+	svrOnly := dflt.EnvString("SVR_ONLY", "0")
+	if svrOnly == "1" {
+		runEmbeddedServer()
+		return
+	}
 	ctx := context.Background()
 	lf := newLeaf1(ctx, "mstrm")
 	defer lf.nc.Close()
-	//defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
-	defer lf.ns.Shutdown()
+	defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
+	//defer lf.ns.Shutdown()
 
 	count, err := dflt.EnvInt("COUNT", 3)
 	log.Printf("COUNT=%d", count)
