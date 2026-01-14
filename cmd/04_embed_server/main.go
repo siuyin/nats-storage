@@ -91,17 +91,17 @@ type hub struct {
 	kv   jetstream.KeyValue
 }
 
-func newHub(ctx context.Context, name, source, srcDomain string) *hub {
+func newHub(ctx context.Context, name, source, srcDomain string) (*hub, error) {
 	var err error
 	h := hub{}
 	h.nc, err = nats.Connect(dflt.EnvString("NATS_URL", "a@localhost:4222"))
 	if err != nil {
-		log.Fatal("hub connect: ", err)
+		return nil, fmt.Errorf("hub connect: %v", err)
 	}
 
 	h.js, err = jetstream.New(h.nc)
 	if err != nil {
-		log.Fatal("hub jetstream: ", err)
+		return nil, fmt.Errorf("hub jetstream: %v", err)
 	}
 
 	h.strm, err = h.js.CreateStream(ctx, jetstream.StreamConfig{
@@ -109,20 +109,20 @@ func newHub(ctx context.Context, name, source, srcDomain string) *hub {
 		Sources: []*jetstream.StreamSource{&jetstream.StreamSource{Name: source, Domain: srcDomain}},
 	})
 	if err != nil {
-		log.Fatal("hub create stream: ", err)
+		return nil, fmt.Errorf("hub create stream: %v", err)
 	}
 
 	h.cons, err = h.strm.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{Durable: name + "Cons", DeliverPolicy: jetstream.DeliverLastPolicy})
 	if err != nil {
-		log.Fatal("hub create consumer: ", err)
+		return nil, fmt.Errorf("hub create consumer: %v", err)
 	}
 
 	h.kv, err = h.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: name + "KV", Mirror: &jetstream.StreamSource{Name: "KV_" + source + "KV", Domain: srcDomain}})
 	if err != nil {
-		log.Fatal("hub create kv: ", err)
+		return nil, fmt.Errorf("hub create kv: %v", err)
 	}
 
-	return &h
+	return &h, nil
 }
 
 func (h *hub) receiveAndDisplayMessages(ctx context.Context) {
@@ -183,8 +183,10 @@ func main() {
 		runEmbeddedServer()
 		return
 	}
+
 	ctx := context.Background()
 	lf := newLeaf1(ctx, "mstrm")
+	defer lf.nc.Flush()
 	defer lf.nc.Close()
 	defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
 	//defer lf.ns.Shutdown()
@@ -203,7 +205,11 @@ func main() {
 
 	lf.receiveAndDisplayMessages(ctx)
 
-	hb := newHub(ctx, "lmstrm", "mstrm", "leaf1")
+	hb, err := newHub(ctx, "lmstrm", "mstrm", "leaf1")
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	defer hb.nc.Close()
 
 	hb.sync(ctx, lf)
