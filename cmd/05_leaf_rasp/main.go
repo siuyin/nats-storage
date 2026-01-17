@@ -16,16 +16,16 @@ import (
 
 var ctx = context.Background()
 
-type leaf1 struct {
+type leaf struct {
 	nc *nats.Conn
 	ns *server.Server
 	js jetstream.JetStream
 	kv jetstream.KeyValue
 }
 
-func newLeaf1(ctx context.Context, name, source, srcDomain string) (*leaf1, error) {
+func newLeaf(ctx context.Context, name, source, srcDomain string) (*leaf, error) {
 	var err error
-	l := leaf1{}
+	l := leaf{}
 	l.nc, l.ns, err = embedNATSServer()
 	if err != nil {
 		return nil, fmt.Errorf("newLeaf1: %v", err)
@@ -44,8 +44,14 @@ func newLeaf1(ctx context.Context, name, source, srcDomain string) (*leaf1, erro
 	return &l, nil
 }
 
+func (l *leaf) hiV1() {
+	l.nc.Subscribe("v1.hi", func(m *nats.Msg) {
+		m.Respond([]byte(fmt.Sprintf("Greetings %s: Nice to meet you. The time is %s.\n", string(m.Data), time.Now().Format("15:04:05.000 -0700"))))
+	})
+}
+
 func main() {
-	lf, err := newLeaf1(ctx, "my", "my", "rasp")
+	lf, err := newLeaf(ctx, "my", "my", "rasp")
 	if err != nil {
 		log.Println(err)
 		return
@@ -53,6 +59,8 @@ func main() {
 	defer lf.nc.Close()
 	defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
 	//defer lf.ns.Shutdown()
+
+	lf.hiV1()
 }
 
 func embedNATSServer() (*nats.Conn, *server.Server, error) {
