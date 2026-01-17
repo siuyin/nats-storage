@@ -60,7 +60,7 @@ func embedNATSServer() (*nats.Conn, *server.Server, error) {
 	passwd := dflt.EnvString("LEAF_PASSWD", "your leaf connection password here")
 	host := dflt.EnvString("LEAF_HOST", "rasp.beyondbroadcast.com:8080")
 	log.Printf("STORE_DIR=%s LEAF_PASSWD=%s LEAF_HOST=%s", dir, passwd[0:5]+"...", host)
-	opts := &server.Options{ServerName: "leaf", JetStream: true, StoreDir: dir, JetStreamDomain: "leaf", Port: 4222, DontListen: false,
+	opts := &server.Options{JetStream: true, StoreDir: dir, JetStreamDomain: "leaf", Port: 4222, DontListen: false,
 		LeafNode: server.LeafNodeOpts{Remotes: []*server.RemoteLeafOpts{
 			&server.RemoteLeafOpts{URLs: []*url.URL{
 				&url.URL{Scheme: "tls", Host: host, User: url.UserPassword("a", passwd)}},
