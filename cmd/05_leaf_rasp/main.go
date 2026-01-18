@@ -80,6 +80,7 @@ func main() {
 	if dflt.EnvString("SHOWINTFS", "0") == "1" {
 		showInterfaces()
 	}
+
 	lf, err := newLeaf(ctx, "my", "my", "rasp")
 	if err != nil {
 		log.Println(err)
@@ -88,6 +89,10 @@ func main() {
 	defer lf.nc.Close()
 	defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
 	//defer lf.ns.Shutdown()
+
+	if dflt.EnvString("SHOWSVR", "0") == "1" {
+		showServerName(lf)
+	}
 
 	lf.hiV1()
 
@@ -149,4 +154,8 @@ func showInterfaces() {
 	for _, i := range intf {
 		fmt.Printf("%s : %x : %#v\n", i.Name, i.HardwareAddr, i)
 	}
+}
+
+func showServerName(l *leaf) {
+	fmt.Printf("Server Node: %s\n", l.ns.Node())
 }
