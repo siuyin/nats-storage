@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/url"
 	"time"
 
@@ -76,6 +77,9 @@ func (l *leaf) rstrm(ctx context.Context, name string, subs []string) (jetstream
 }
 
 func main() {
+	if dflt.EnvString("SHOWINTFS", "0") == "1" {
+		showInterfaces()
+	}
 	lf, err := newLeaf(ctx, "my", "my", "rasp")
 	if err != nil {
 		log.Println(err)
@@ -134,4 +138,15 @@ func embedNATSServer() (*nats.Conn, *server.Server, error) {
 	}
 
 	return nc, ns, nil
+}
+
+func showInterfaces() {
+	intf, err := net.Interfaces()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	for _, i := range intf {
+		fmt.Printf("%s : %x : %#v\n", i.Name, i.HardwareAddr, i)
+	}
 }
