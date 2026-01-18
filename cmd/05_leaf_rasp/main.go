@@ -88,14 +88,20 @@ func main() {
 	lf.hiV1()
 
 	ctx := context.Background()
-	mstrm, err := lf.rstrm(ctx, "mstrm", []string{"m.>"})
-	if err != nil {
-		log.Println(err)
-		return
-	}
+	createRemoteStream(ctx, lf)
+}
 
-	_ = mstrm
-	log.Println("remote stream mstrm created")
+func createRemoteStream(ctx context.Context, lf *leaf) {
+	go func() {
+		mstrm, err := lf.rstrm(ctx, "mstrm", []string{"m.>"})
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		_ = mstrm
+		log.Println("remote stream mstrm created")
+	}()
 }
 
 func embedNATSServer() (*nats.Conn, *server.Server, error) {
