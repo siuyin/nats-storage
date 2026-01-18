@@ -4,14 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"net"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/nats-io/nuid"
 	"github.com/siuyin/dflt"
 )
 
@@ -114,11 +117,12 @@ func createRemoteStream(ctx context.Context, lf *leaf) {
 }
 
 func embedNATSServer() (*nats.Conn, *server.Server, error) {
+	id, dom := nuidAndHash()
 	dir := dflt.EnvString("STORE_DIR", "/home/siuyin/embedded_nats")
 	passwd := dflt.EnvString("LEAF_PASSWD", "your leaf connection password here")
 	host := dflt.EnvString("LEAF_HOST", "rasp.beyondbroadcast.com:8080")
 	log.Printf("STORE_DIR=%s LEAF_PASSWD=%s LEAF_HOST=%s", dir, passwd[0:5]+"...", host)
-	opts := &server.Options{JetStream: true, StoreDir: dir, JetStreamDomain: "leaf", Port: 4222, DontListen: false,
+	opts := &server.Options{ServerName: id, JetStream: true, StoreDir: dir, JetStreamDomain: dom, Port: 4222, DontListen: false,
 		LeafNode: server.LeafNodeOpts{Remotes: []*server.RemoteLeafOpts{
 			&server.RemoteLeafOpts{URLs: []*url.URL{
 				&url.URL{Scheme: "tls", Host: host, User: url.UserPassword("a", passwd)}},
@@ -158,4 +162,12 @@ func showInterfaces() {
 
 func showServerName(l *leaf) {
 	fmt.Printf("Server Node: %s\n", l.ns.Node())
+}
+
+func nuidAndHash() (string, string) {
+	id := nuid.Next()
+	h := fnv.New32a()
+	h.Write([]byte(id))
+	hash := h.Sum32()
+	return id, "D" + strconv.FormatUint(uint64(hash), 36)
 }
