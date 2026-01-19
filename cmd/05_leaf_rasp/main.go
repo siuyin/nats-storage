@@ -155,25 +155,17 @@ func main() {
 
 	lf.hiV1()
 
-	createRemoteStream(ctx, lf)
+	if _, err := lf.rstrm(ctx, "mstrm", []string{"m.>"}); err != nil {
+		log.Println(err)
+		return
+	}
 	defer lf.unRstrm(ctx, "mstrm") // can use ctx as we use the child context to cancell
+
+	log.Println("remote mstrm created")
 
 	<-ctxStop.Done()
 	log.Println("Interrupt / Terminate signal received")
 
-}
-
-func createRemoteStream(ctx context.Context, lf *leaf) {
-	go func() {
-		mstrm, err := lf.rstrm(ctx, "mstrm", []string{"m.>"})
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		_ = mstrm
-		log.Println("remote stream mstrm created")
-	}()
 }
 
 func embedNATSServer() (*nats.Conn, *server.Server, error) {
