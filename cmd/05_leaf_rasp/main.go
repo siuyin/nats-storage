@@ -8,7 +8,10 @@ import (
 	"log"
 	"net"
 	"net/url"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/nats-io/nats-server/v2/server"
@@ -17,8 +20,6 @@ import (
 	"github.com/nats-io/nuid"
 	"github.com/siuyin/dflt"
 )
-
-var ctx = context.Background()
 
 type leaf struct {
 	nc *nats.Conn
@@ -108,6 +109,9 @@ func (l *leaf) unRstrm(ctx context.Context, name string) error {
 }
 
 func (l leaf) Domain() string {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
 	inf, err := l.js.AccountInfo(ctx)
 	if err != nil {
 		log.Println("error getting domain from account info:", err)
@@ -128,6 +132,9 @@ func waitForLeafConnect(ctx context.Context, l *leaf) {
 }
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	if dflt.EnvString("SHOWINTFS", "0") == "1" {
 		showInterfaces()
 	}
@@ -137,9 +144,8 @@ func main() {
 		log.Println(err)
 		return
 	}
-	defer lf.nc.Close()
-	defer lf.ns.WaitForShutdown() // requires a ctrl-C to terminate
-	//defer lf.ns.Shutdown()
+	//defer lf.nc.Close()
+	//defer lf.ns.WaitForShutdown()
 
 	if dflt.EnvString("SHOWSVR", "0") == "1" {
 		showServerName(lf)
@@ -147,10 +153,15 @@ func main() {
 
 	lf.hiV1()
 
-	ctx := context.Background()
 	createRemoteStream(ctx, lf)
-	time.Sleep(time.Second)
-	lf.unRstrm(ctx, "mstrm")
+
+	<-ctx.Done()
+
+	log.Println("Interrupt / Terminate signal received")
+	lf.unRstrm(context.Background(), "mstrm") // can't use ctx as that has been cancelled
+	lf.nc.Close()
+	lf.ns.Shutdown()
+	lf.ns.WaitForShutdown()
 
 }
 
@@ -172,6 +183,7 @@ func embedNATSServer() (*nats.Conn, *server.Server, error) {
 	host := dflt.EnvString("LEAF_HOST", "rasp.beyondbroadcast.com:8080")
 	log.Printf("STORE_DIR=%s LEAF_PASSWD=%s LEAF_HOST=%s", dir, passwd[0:5]+"...", host)
 	opts := &server.Options{ServerName: id, JetStream: true, StoreDir: dir, JetStreamDomain: dom, Port: 4222, DontListen: false,
+		NoSigs: true,
 		LeafNode: server.LeafNodeOpts{Remotes: []*server.RemoteLeafOpts{
 			&server.RemoteLeafOpts{URLs: []*url.URL{
 				&url.URL{Scheme: "tls", Host: host, User: url.UserPassword("a", passwd)}},
