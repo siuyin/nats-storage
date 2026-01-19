@@ -164,14 +164,16 @@ func main() {
 }
 
 func createRemoteStream(ctx context.Context, lf *leaf) {
-	mstrm, err := lf.rstrm(ctx, "mstrm", []string{"m.>"})
-	if err != nil {
-		log.Println(err)
-		return
-	}
+	go func() {
+		mstrm, err := lf.rstrm(ctx, "mstrm", []string{"m.>"})
+		if err != nil {
+			log.Println(err)
+			return
+		}
 
-	_ = mstrm
-	log.Println("remote stream mstrm created")
+		_ = mstrm
+		log.Println("remote stream mstrm created")
+	}()
 }
 
 func embedNATSServer() (*nats.Conn, *server.Server, error) {
