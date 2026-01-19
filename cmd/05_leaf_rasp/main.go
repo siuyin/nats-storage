@@ -156,8 +156,7 @@ func main() {
 	lf.hiV1()
 
 	createRemoteStream(ctx, lf)
-	//defer lf.unRstrm(context.Background(), "mstrm") // can't use ctx as that has been cancelled
-	defer lf.unRstrm(ctx, "mstrm") // can't use ctx as that has been cancelled
+	defer lf.unRstrm(ctx, "mstrm") // can use ctx as we use the child context to cancell
 
 	<-ctxStop.Done()
 	log.Println("Interrupt / Terminate signal received")
