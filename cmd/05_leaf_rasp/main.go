@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -72,14 +73,36 @@ func (l *leaf) rstrm(ctx context.Context, name string, subs []string) (jetstream
 
 	rstrm, err := l.jr.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name: name, MaxAge: 10 * time.Minute,
-		Sources: []*jetstream.StreamSource{
-			&jetstream.StreamSource{Name: name + l.Domain(), Domain: l.Domain()},
-		},
+		Sources: l.addSrtreamSource(ctx, name),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("leaf rstrm: create stream: %s: %v", name, err)
 	}
 	return rstrm, nil
+}
+
+func (l *leaf) addSrtreamSource(ctx context.Context, name string) []*jetstream.StreamSource {
+	srcs, err := l.rstrmSources(ctx, name)
+	if err != nil {
+		log.Println("addStreamSrouce:", err)
+		return nil
+	}
+
+	ss := []*jetstream.StreamSource{}
+	for _, s := range srcs {
+		if s == name {
+			continue
+		}
+
+		dom := strings.Split(s, name)[1]
+		ss = append(ss, &jetstream.StreamSource{Name: s, Domain: dom})
+	}
+
+	ss = append(ss, &jetstream.StreamSource{Name: name + l.Domain(), Domain: l.Domain()})
+	for _, s := range ss {
+		log.Printf("addStreamSource name: %s, domain: %s", s.Name, s.Domain)
+	}
+	return ss
 }
 
 func (l *leaf) rstrmSources(ctx context.Context, name string) ([]string, error) {
