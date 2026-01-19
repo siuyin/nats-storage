@@ -132,7 +132,8 @@ func waitForLeafConnect(ctx context.Context, l *leaf) {
 }
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx := context.Background()
+	ctxStop, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	if dflt.EnvString("SHOWINTFS", "0") == "1" {
@@ -155,9 +156,10 @@ func main() {
 	lf.hiV1()
 
 	createRemoteStream(ctx, lf)
-	defer lf.unRstrm(context.Background(), "mstrm") // can't use ctx as that has been cancelled
+	//defer lf.unRstrm(context.Background(), "mstrm") // can't use ctx as that has been cancelled
+	defer lf.unRstrm(ctx, "mstrm") // can't use ctx as that has been cancelled
 
-	<-ctx.Done()
+	<-ctxStop.Done()
 	log.Println("Interrupt / Terminate signal received")
 
 }
