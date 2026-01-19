@@ -98,8 +98,12 @@ func (l *leaf) rstrmSources(ctx context.Context, name string) ([]string, error) 
 	return srcs, nil
 }
 
-// TODO
 func (l *leaf) unRstrm(ctx context.Context, name string) error {
+	if err := l.js.DeleteStream(ctx, name+l.Domain()); err != nil {
+		return fmt.Errorf("unRstrm: %v", err)
+	}
+
+	log.Println("stream deleted", name+l.Domain())
 	return nil
 }
 
@@ -145,6 +149,9 @@ func main() {
 
 	ctx := context.Background()
 	createRemoteStream(ctx, lf)
+	time.Sleep(time.Second)
+	lf.unRstrm(ctx, "mstrm")
+
 }
 
 func createRemoteStream(ctx context.Context, lf *leaf) {
