@@ -163,6 +163,14 @@ func main() {
 
 	log.Println("remote mstrm created")
 
+	srcs, err := lf.rstrmSources(ctx, "mstrm")
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	log.Println(srcs)
+
 	<-ctxStop.Done()
 	log.Println("Interrupt / Terminate signal received")
 
