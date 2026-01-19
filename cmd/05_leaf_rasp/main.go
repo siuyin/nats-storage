@@ -62,21 +62,65 @@ func (l *leaf) hiV1() {
 }
 
 func (l *leaf) rstrm(ctx context.Context, name string, subs []string) (jetstream.Stream, error) {
+	waitForLeafConnect(ctx, l)
+
+	if _, err := l.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name: name + l.Domain(), Subjects: subs, MaxAge: 10 * time.Minute}); err != nil {
+		return nil, fmt.Errorf("rstrm: create local stream: %v", err)
+	}
+
+	rstrm, err := l.jr.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name: name, MaxAge: 10 * time.Minute,
+		Sources: []*jetstream.StreamSource{
+			&jetstream.StreamSource{Name: name + l.Domain(), Domain: l.Domain()},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("leaf rstrm: create stream: %s: %v", name, err)
+	}
+	return rstrm, nil
+}
+
+func (l *leaf) rstrmSources(ctx context.Context, name string) ([]string, error) {
+	s, err := l.jr.Stream(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("rstrmSources Stream: %v", err)
+	}
+
+	inf, err := s.Info(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("rstrmSources info : %v", err)
+	}
+	srcs := []string{}
+	for _, srcInf := range inf.Sources {
+		srcs = append(srcs, srcInf.Name)
+	}
+	return srcs, nil
+}
+
+// TODO
+func (l *leaf) unRstrm(ctx context.Context, name string) error {
+	return nil
+}
+
+func (l leaf) Domain() string {
+	inf, err := l.js.AccountInfo(ctx)
+	if err != nil {
+		log.Println("error getting domain from account info:", err)
+		return ""
+	}
+	return inf.Domain
+}
+
+func waitForLeafConnect(ctx context.Context, l *leaf) {
 	for {
 		_, err := l.jr.AccountInfo(ctx)
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		break
+		return
 	}
-
-	rstrm, err := l.jr.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name: name, Subjects: subs, MaxAge: 10 * time.Minute})
-	if err != nil {
-		return nil, fmt.Errorf("leaf rstrm: create stream: %s: %v", name, err)
-	}
-	return rstrm, nil
 }
 
 func main() {
