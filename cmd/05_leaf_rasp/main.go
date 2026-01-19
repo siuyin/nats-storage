@@ -144,8 +144,9 @@ func main() {
 		log.Println(err)
 		return
 	}
-	//defer lf.nc.Close()
-	//defer lf.ns.WaitForShutdown()
+	defer lf.ns.WaitForShutdown()
+	defer lf.ns.Shutdown()
+	defer lf.nc.Close()
 
 	if dflt.EnvString("SHOWSVR", "0") == "1" {
 		showServerName(lf)
@@ -154,14 +155,10 @@ func main() {
 	lf.hiV1()
 
 	createRemoteStream(ctx, lf)
+	defer lf.unRstrm(context.Background(), "mstrm") // can't use ctx as that has been cancelled
 
 	<-ctx.Done()
-
 	log.Println("Interrupt / Terminate signal received")
-	lf.unRstrm(context.Background(), "mstrm") // can't use ctx as that has been cancelled
-	lf.nc.Close()
-	lf.ns.Shutdown()
-	lf.ns.WaitForShutdown()
 
 }
 
